@@ -7,7 +7,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
-public class Kikbot {
+public class Instabot {
 	
 
 	public static boolean[] delivery(int[] order, int[][] shoppers) {
@@ -73,12 +73,16 @@ public class Kikbot {
 	public static boolean busyHolidays(String[][] shoppers, String[][] orders, int[] leadTime) throws ParseException {
 			
 		class toolClass {
-								
+			
+			List<Integer> plan = new ArrayList<>();
+			int count = 0;
+			boolean can = false;
+			
 			class Order {
 				Date from, to, latestFrom, earliestTo;
-				boolean deliverable = false;
 				List<Integer> canShopper = new ArrayList<>();
-								
+				int needTime = 0;
+				boolean deliverable = false;
 				public void addShopper(int i) {
 					canShopper.add(i);
 				}
@@ -87,12 +91,8 @@ public class Kikbot {
 			class Shopper {
 				Date from, to;
 				int workMinutes = 0;
-				boolean used = false;;
 			}
-			
-			Order[] orderList;
-			Shopper[] shopperList;
-			
+						
 			public toolClass(String[][] s, String[][] o, int[] l) throws ParseException {
 				orderList = createOrders(o, l);
 				shopperList = createShoppers(s);
@@ -113,6 +113,7 @@ public class Kikbot {
 					cal.setTime(o.from);
 					cal.add(Calendar.MINUTE, leadTime);
 					o.earliestTo = cal.getTime();
+					o.needTime = leadTime;
 					return o;
 				}
 				
@@ -130,7 +131,6 @@ public class Kikbot {
 			public Shopper createShopper(String[] shoppers) throws ParseException {
 					Shopper s = new Shopper();
 					SimpleDateFormat df = new SimpleDateFormat("HH:mm");
-					Calendar cal = Calendar.getInstance();
 					s.from = df.parse(shoppers[0]);
 					s.to = df.parse(shoppers[1]);
 					s.workMinutes = (int)(s.to.getTime() - s.from.getTime())/60000;
@@ -147,52 +147,91 @@ public class Kikbot {
 					
 					return shopperList;
 				}
-		}
-		
-		toolClass tool = new toolClass(shoppers, orders, leadTime);
-		
-		for(int i=0;i<orders.length;i++) {
-			for(int j=0;j<shoppers.length;j++) {			
-				if((tool.shopperList[j].to.compareTo(tool.orderList[i].earliestTo) >=0) && 
-				(tool.shopperList[j].from.compareTo(tool.orderList[i].latestFrom) <= 0) &&
-				tool.shopperList[j].workMinutes >= 30) {
-				tool.orderList[i].addShopper(j);
-				tool.orderList[i].deliverable = true;
-			} 
-//				if(tool.shopperList[j].used == false) {
-//					if((tool.shopperList[j].to.compareTo(tool.orderList[i].earliestTo) >=0) && 
-//						(tool.shopperList[j].from.compareTo(tool.orderList[i].latestFrom) <= 0) &&
-//						tool.shopperList[j].workMinutes >= 30) {
-//						tool.orderList[i].addShopper(j);
-//						tool.shopperList[j].used = true;
-//						tool.orderList[i].deliverable = true;
-//						break;
-//					} 
-//				}
+			
+			public void reverseOrder(int index) {
+				int i = index;
+				
+				if(i == 0 && orderList.length == 1) {
+					
+					if(findShopper(orderList[i], count) == false) can = false;
+					else can = true;
+				}
+				else if(i == orderList.length - 1) {
+					if(findShopper(orderList[i], 0) == true) {
+						can = true;
+						} else {
+							reverseOrder(--i);}
+				} else if (i == 0) {
+					count++;
+					plan.clear();
+					if(findShopper(orderList[i], count) == false) {can = false;}
+					else
+						reverseOrder(++i);
+				} else {
+					if(findShopper(orderList[i], 0) == true) {
+						reverseOrder(++i);
+				} 	else {
+						reverseOrder(--i);
+					}
+				}
 			}
+			
+			public boolean findShopper(Order o, int c) {
+				o.deliverable = false;
+				
+				if(c > 0) c = c - 1;
+				
+				if(c == orderList.length) {return false;}
+				else {
+					for(int j=c;j<o.canShopper.size();j++) {
+					int i = o.canShopper.get(j);
+					if(!plan.contains(i)) {
+						plan.add(i);
+						o.deliverable = true;
+						break;
+					}
+				}
+			}
+				return o.deliverable;
+		}
+					
+			public void fillOrder() {
+				
+				for(int i=0;i<orders.length;i++) {
+					for(int j=0;j<shoppers.length;j++) {			
+						if((shopperList[j].to.compareTo(orderList[i].earliestTo) >=0) && 
+						(shopperList[j].from.compareTo(orderList[i].latestFrom) <= 0) &&
+						shopperList[j].workMinutes >= orderList[i].needTime) {
+						orderList[i].addShopper(j);
+						} 
+					}
+				}
+			
+			}
+		
+			Order[] orderList;
+			Shopper[] shopperList;
 		}
 		
-		for(int i=0;i<tool.orderList.length;i++) {
-			if(tool.orderList[i].deliverable == false) {
-				return false;
-			}
-		}
-		return true;
+		toolClass t = new toolClass(shoppers, orders, leadTime);
+		t.fillOrder();
+		t.reverseOrder(0);
+		return t.can;
+		
 	}
 	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws ParseException {
 
-		String[][] shoppers = {{"23:00","23:59"}, {"22:30","23:30"}};
-		String[][] orders = {{"23:15","23:35"}, {"23:00","23:31"}};
 //		String[][] orders = {{"14:30","15:00"}};
-//		String[][] shoppers = {{"15:10", "16:00"}, {"17:50", "22:30"}, {"13:00","14:40"}};
-		int[] leadTime = {20, 31};
-		try {
-			System.out.println(busyHolidays(shoppers, orders, leadTime));
-		} catch (ParseException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+//		String[][] shoppers = {{"15:10","16:00"}, {"17:50","22:30"}, {"13:00","14:40"}};
+//		int[] leadTime = {15};
+		
+		String[][] orders = {{"00:00","01:00"}, {"01:00","01:10"}, {"00:00","02:00"}};
+		String[][] shoppers = {{"00:00","02:00"}, {"00:00","02:00"}, {"00:00","01:00"}, {"01:00","02:00"}};
+		int[] leadTime = {0, 0, 120};
+		
+		boolean r = busyHolidays(shoppers, orders, leadTime);
+		System.out.println((String.valueOf(r)));
 	}
 		
 }
